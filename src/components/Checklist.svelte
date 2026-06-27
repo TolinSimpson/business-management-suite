@@ -17,7 +17,7 @@
         onclick={() => onToggle(item.step)}
         onkeydown={(e) => (e.key === "Enter" || e.key === " ") && onToggle(item.step)}
       >
-        <span class="box">{item.done ? "✓" : ""}</span>
+        <span class="box"></span>
         <span class="lbl">{item.step}</span>
       </div>
     {/each}

@@ -1,0 +1,149 @@
+import { writable } from "svelte/store";
+import type { OrgConfig } from "./types";
+import { DEFAULT_FINANCE } from "./finance";
+import { piiKey } from "./access";
+import { decryptField, isEncrypted } from "./crypto";
+
+// The shared, public org directory (company info + employee list). It lives in
+// a static config.json that managers publish; every device fetches it read-only,
+// no login. Reads are network-first with a localStorage fallback so the
+// directory still shows offline and updates propagate within a session.
+//
+// Sensitive employee fields (phone/email) are stored ENCRYPTED in config.json
+// because the file is public. We fetch the raw (encrypted) config, then expose a
+// DECRYPTED view (`orgConfig`) once the shared access key is available. Until
+// then, encrypted fields are blanked so they never surface locked. The raw,
+// still-encrypted config is kept for managers who re-publish. See lib/crypto.ts.
+
+const CONFIG_URL = "config.json"; // relative — matches vite `base: "./"`
+const CACHE_KEY = "org-config-cache-v1";
+const POLL_MS = 5 * 60_000; // re-check for new info every 5 min while open
+
+export const emptyConfig: OrgConfig = {
+  version: 0,
+  company: { name: "" },
+  employees: [],
+  finance: DEFAULT_FINANCE,
+};
+
+const initialCache = loadCached();
+
+/** The raw config exactly as fetched/cached — PII fields still encrypted. */
+export const rawConfig = writable<OrgConfig>(initialCache);
+/** The org directory shown in the UI — PII decrypted when unlocked, else blank. */
+export const orgConfig = writable<OrgConfig>(emptyConfig);
+/** True once a newer version arrives mid-session — drives the "updated" banner. */
+export const configUpdated = writable(false);
+/**
+ * True once we've resolved the config at least once (cache hit, or first network
+ * attempt completed). The access gate waits on this so it never flashes the app
+ * before we know whether a gate is configured.
+ */
+export const configReady = writable(initialCache.version > 0);
+
+let rawVersion = 0;
+
+function loadCached(): OrgConfig {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (raw) return JSON.parse(raw) as OrgConfig;
+  } catch {
+    /* ignore */
+  }
+  return emptyConfig;
+}
+
+function cache(cfg: OrgConfig): void {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cfg));
+  } catch {
+    /* ignore */
+  }
+}
+
+// ---- decrypted view ---------------------------------------------------------
+// Recompute `orgConfig` whenever the raw config or the access key changes. A
+// monotonically increasing token guards against an older async pass overwriting
+// a newer one (the key can flip while a decrypt is in flight).
+
+let latestRaw: OrgConfig = emptyConfig;
+let latestKey: CryptoKey | null = null;
+let pass = 0;
+
+rawConfig.subscribe((c) => {
+  latestRaw = c;
+  rawVersion = c.version;
+  recompute();
+});
+piiKey.subscribe((k) => {
+  latestKey = k;
+  recompute();
+});
+
+async function recompute(): Promise<void> {
+  const token = ++pass;
+  const c = latestRaw;
+  const key = latestKey;
+
+  if (!key) {
+    // Locked: hide encrypted PII so it never shows scrambled; leave any
+    // plaintext (legacy) fields untouched.
+    const employees = c.employees.map((e) => ({
+      ...e,
+      email: isEncrypted(e.email) ? "" : e.email,
+      phone: isEncrypted(e.phone) ? "" : e.phone,
+    }));
+    if (token === pass) orgConfig.set({ ...c, employees });
+    return;
+  }
+
+  const employees = await Promise.all(
+    c.employees.map(async (e) => ({
+      ...e,
+      email: await decryptField(key, e.email),
+      phone: await decryptField(key, e.phone),
+    }))
+  );
+  if (token === pass) orgConfig.set({ ...c, employees });
+}
+
+/**
+ * Fetch the latest config (network-first). On a newer version, swap it in and
+ * flag configUpdated. Offline / not-yet-deployed → keep the cached copy.
+ */
+export async function refreshConfig(): Promise<void> {
+  try {
+    const res = await fetch(CONFIG_URL, { cache: "no-cache" });
+    if (!res.ok) return;
+    const next = (await res.json()) as OrgConfig;
+    if (typeof next.version !== "number") return;
+    if (next.version !== rawVersion) {
+      // Only a *higher* version after the first load counts as "new info";
+      // the initial fill (rawVersion === 0) shouldn't trigger the banner.
+      if (rawVersion > 0 && next.version > rawVersion) configUpdated.set(true);
+      cache(next);
+      rawConfig.set(next);
+    }
+  } catch {
+    /* offline / not deployed — keep cached copy */
+  }
+}
+
+/**
+ * Keep the directory fresh: check now, on tab refocus, and on a timer.
+ * Returns a cleanup fn.
+ */
+export function startConfigSync(): () => void {
+  // Mark ready once the first attempt settles, so an online first-run (no cache)
+  // still reaches a gate/open decision instead of loading forever.
+  refreshConfig().finally(() => configReady.set(true));
+  const onVisible = () => {
+    if (document.visibilityState === "visible") refreshConfig();
+  };
+  document.addEventListener("visibilitychange", onVisible);
+  const timer = setInterval(refreshConfig, POLL_MS);
+  return () => {
+    document.removeEventListener("visibilitychange", onVisible);
+    clearInterval(timer);
+  };
+}

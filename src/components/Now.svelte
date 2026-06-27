@@ -1,8 +1,10 @@
 <script lang="ts">
   import { state as appState, setTaskNote, toggleStep } from "../lib/state";
-  import { nowView, dateKey, displayLabel } from "../lib/schedule";
-  import { testAlert, requestPermission } from "../lib/notify";
-  import { enableWakeLock, disableWakeLock, isWakeLockSupported } from "../lib/wakelock";
+  import { orgConfig } from "../lib/config";
+  import { effectiveTemplate, PERSONAL_TEMPLATE_ID } from "../lib/templates";
+  import { nowView, dateKey, displayLabel, nextDay, formatTime, findHoliday } from "../lib/schedule";
+  import { isWakeLockSupported } from "../lib/wakelock";
+  import { focus } from "../lib/focus";
   import Checklist from "./Checklist.svelte";
 
   // Reactive clock — re-render every 20s so the active block + countdown stay live.
@@ -12,24 +14,19 @@
     return () => clearInterval(id);
   });
 
-  let view = $derived(nowView($appState, now));
   let dk = $derived(dateKey(now));
-
-  // Focus mode: keep the screen awake + go full-screen so the hourly cue always lands.
-  let focus = $state(false);
-  async function toggleFocus() {
-    focus = !focus;
-    if (focus) {
-      await requestPermission();
-      await enableWakeLock();
-      try { await document.documentElement.requestFullscreen(); } catch { /* gesture/unsupported */ }
-    } else {
-      await disableWakeLock();
-      try { if (document.fullscreenElement) await document.exitFullscreen(); } catch {}
-    }
+  // A company-wide day off takes over the whole screen.
+  let holiday = $derived(findHoliday($orgConfig.holidays, dk));
+  // The schedule in effect now: personal off-hours schedule when applicable,
+  // else the device's assigned work template.
+  let template = $derived(effectiveTemplate($appState, $orgConfig, now));
+  let isPersonal = $derived(template.id === PERSONAL_TEMPLATE_ID);
+  let view = $derived(holiday ? null : nowView(template, $appState, now));
+  // The 4 PM block plans for tomorrow; its fields write to tomorrow's blocks.
+  let tomorrowKey = $derived(dateKey(nextDay(now)));
+  function planValue(time: string): string {
+    return $appState.days[tomorrowKey]?.blocks[time]?.taskNote ?? "";
   }
-  // Release the lock if we leave the screen.
-  $effect(() => () => { void disableWakeLock(); });
 
   // Flash the card when the active block changes (a glanceable cue in Focus mode).
   let flash = $state(false);
@@ -52,18 +49,20 @@
   }
 </script>
 
-<div class="now-head">
-  <h1>Now</h1>
-  <button class:primary={focus} onclick={toggleFocus}>
-    {focus ? "◉ Focus on" : "○ Focus"}
-  </button>
-</div>
-
-{#if view}
+{#if holiday}
+  <div class="card holiday-card">
+    <div class="holiday-emoji">🎉</div>
+    <div class="holiday-name">{holiday.name}</div>
+    <p class="muted">Enjoy your day off — no schedule today.</p>
+  </div>
+{:else if view}
   <div class="card now-card" class:flash>
-    <div class="now-time">{fmtClock(now)} · {now.toLocaleDateString([], { weekday: "long" })}</div>
+    <div class="now-time">
+      {fmtClock(now)} · {now.toLocaleDateString([], { weekday: "long" })}
+      {#if isPersonal}<span class="pill">Personal</span>{/if}
+    </div>
     <div class="now-label">{displayLabel(view.label)}</div>
-    <div class="now-theme">{view.theme}</div>
+    {#if view.detail}<div class="now-theme">{view.detail}</div>{/if}
     {#if view.taskNote}<div class="now-task">{view.taskNote}</div>{/if}
     <div class="now-meta">
       {fmtRemaining(view.endsInMin)}
@@ -71,33 +70,78 @@
     </div>
   </div>
 
-  {#if focus}
+  {#if $focus}
     <p class="muted" style="margin-top:-4px;font-size:.82rem">
       Screen staying awake{isWakeLockSupported() ? "" : " (not supported on this browser)"}. Keep the app open and charging.
     </p>
   {/if}
 
-  <div class="card">
-    <label for="task">Specific task / prompt for this block</label>
-    <textarea
-      id="task"
-      placeholder="e.g. Ship the alarm plugin; prompt agent to draft the foreground service"
-      value={view.taskNote}
-      oninput={(e) => setTaskNote(dk, view!.time, e.currentTarget.value)}
-    ></textarea>
-  </div>
+  {#if view.isPlan}
+    <!-- Planning block: each field surfaces on the matching block tomorrow.
+         Configured per step via the block's `plan` inputs. -->
+    <div class="card">
+      <h3>Plan for tomorrow</h3>
+      <p class="muted" style="margin-top:0;font-size:.85rem">
+        {now.toLocaleDateString([], { weekday: "long" })} → these appear in tomorrow's matching time slots.
+      </p>
+      {#each view.planTargets as t}
+        <label for={"plan-" + t.key}>{t.label} ({formatTime(t.time)})</label>
+        <textarea
+          id={"plan-" + t.key}
+          value={planValue(t.time)}
+          oninput={(e) => setTaskNote(tomorrowKey, t.time, e.currentTarget.value)}
+        ></textarea>
+        <div style="height:10px"></div>
+      {/each}
+    </div>
+  {/if}
 
-  <div class="card">
-    <h3>Process</h3>
-    <Checklist items={view.checklist} onToggle={(step) => toggleStep(dk, view!.time, step)} />
-  </div>
+  {#if view.checklist.length}
+    <div class="card">
+      <h3>Process</h3>
+      <Checklist items={view.checklist} onToggle={(step) => toggleStep(dk, view!.time, step)} />
+    </div>
+  {/if}
 {:else}
   <div class="card">
-    <p class="muted">Nothing scheduled right now — you're before the day's first block.</p>
+    {#if template.blocks.length}
+      <p class="muted">
+        Nothing scheduled right now — {template.name} runs {formatTime(template.blocks[0].time)} – {formatTime(
+          template.blocks[template.blocks.length - 1].time
+        )}.
+      </p>
+    {:else}
+      <p class="muted">No schedule set. Add blocks under Settings → Off-hours schedule, or pick yourself under "I am".</p>
+    {/if}
   </div>
 {/if}
 
-<div class="row-actions">
-  <button onclick={() => requestPermission()}>Enable notifications</button>
-  <button class="primary" onclick={() => testAlert($appState)}>Test alert</button>
-</div>
+<style>
+  .holiday-card {
+    text-align: center;
+    padding: 28px 16px;
+  }
+  .holiday-emoji {
+    font-size: 2.4rem;
+    line-height: 1;
+  }
+  .holiday-name {
+    margin-top: 10px;
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+  .holiday-card p {
+    margin: 6px 0 0;
+  }
+  .pill {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    font-size: 0.7rem;
+    font-weight: 600;
+    vertical-align: middle;
+  }
+</style>

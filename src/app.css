@@ -9,6 +9,9 @@
   --accent-dim: #2a3c5e;
   --good: #4ec98a;
   --radius: 14px;
+  /* Shared width for cards/modals, the tool header banner, and the footer tab
+     bar. Matches the content area: #app (560) minus main's 16px side padding. */
+  --modal-w: min(528px, calc(100vw - 32px));
   color-scheme: dark;
 }
 
@@ -69,11 +72,12 @@ h1 {
 
 button {
   font: inherit;
+  line-height: 1.2; /* tighter than the body's 1.5 so buttons aren't tall */
   color: var(--text);
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 10px 14px;
+  padding: 8px 14px;
   cursor: pointer;
 }
 
@@ -118,11 +122,13 @@ nav.tabs {
   bottom: 0;
   left: 0;
   right: 0;
-  max-width: 560px;
+  width: var(--modal-w);
+  max-width: none;
   margin: 0 auto;
   display: flex;
   background: var(--surface);
   border-top: 1px solid var(--line);
+  border-radius: var(--radius) var(--radius) 0 0;
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -147,6 +153,7 @@ nav.tabs button.active {
 nav.tabs .ico {
   font-size: 1.2rem;
   line-height: 1;
+  color: var(--muted); /* icons stay grey even on the active tab */
 }
 
 /* Now screen */
@@ -232,9 +239,15 @@ nav.tabs .ico {
 }
 
 .check.done .box {
-  background: var(--good);
-  border-color: var(--good);
-  color: #0f1115;
+  border-color: var(--accent);
+}
+
+.check.done .box::after {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--accent);
 }
 
 .check.done .lbl {

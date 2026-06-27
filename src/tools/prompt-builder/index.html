@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Prompt Builder Hub</title>
+        <style>
+            * { margin: 0; box-sizing: border-box; }
+            body {
+                font-family: system-ui, sans-serif;
+                max-width: 760px;
+                margin: 2rem auto;
+                padding: 0 1rem;
+                color: #222;
+                background: #fafafa;
+            }
+            h1 { font-size: 1.6rem; margin-bottom: 0.35rem; }
+            .subtitle { font-size: 0.9rem; color: #666; margin-bottom: 1.75rem; }
+            .grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                gap: 1rem;
+            }
+            .card {
+                display: block;
+                padding: 1.25rem 1.25rem 1.1rem;
+                border: 1px solid #ccc;
+                border-radius: 8px;
+                background: #fff;
+                text-decoration: none;
+                color: inherit;
+                transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+            }
+            .card:hover {
+                border-color: #4a90d9;
+                transform: translateY(-2px);
+                box-shadow: 0 4px 14px rgba(74, 144, 217, 0.15);
+            }
+            .card-icon {
+                font-size: 1.8rem;
+                margin-bottom: 0.35rem;
+                line-height: 1;
+            }
+            .card-title {
+                font-size: 1.05rem;
+                font-weight: 600;
+                margin-bottom: 0.25rem;
+            }
+            .card-desc {
+                font-size: 0.85rem;
+                color: #555;
+                line-height: 1.4;
+                margin-bottom: 0.5rem;
+            }
+            .card-platforms {
+                font-size: 0.72rem;
+                color: #888;
+                line-height: 1.4;
+            }
+            footer {
+                margin-top: 2rem;
+                font-size: 0.8rem;
+                color: #888;
+                text-align: center;
+            }
+            footer a { color: #4a90d9; text-decoration: none; }
+            footer a:hover { text-decoration: underline; }
+        </style>
+    
+    <style id="app-theme-override">
+      html { color-scheme: dark; }
+      body {
+        max-width: none; margin: 0; padding: 0 2px;
+        color: #e7e9ee; background: transparent;
+        font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* The tool view shows its own title banner — drop the page's big H1. */
+      body > h1 { display: none !important; }
+      .subtitle { color: #9aa1ad; }
+      /* ---- hub (index.html) ---- */
+      .card {
+        background: #181b22; border: 1px solid #2c313c; color: inherit;
+        border-radius: 14px;
+      }
+      .card:hover { border-color: #6ea8fe; box-shadow: none; transform: none; }
+      .card-icon { color: #6ea8fe; }
+      .card-title { color: #e7e9ee; }
+      .card-desc, .card-platforms { color: #9aa1ad; }
+      footer { color: #9aa1ad; }
+      footer a { color: #6ea8fe; }
+      /* ---- builder pages ---- */
+      .step-label, .output-label { color: #9aa1ad; }
+      .step-hint, .section-divider { color: #9aa1ad; }
+      select, .text-input, .prompt-area {
+        color: #e7e9ee; background: #21252e;
+        border: 1px solid #2c313c; border-radius: 10px;
+      }
+      select:focus, .text-input:focus, .prompt-area:focus {
+        outline: 2px solid #6ea8fe; border-color: #6ea8fe;
+      }
+      .checks label {
+        color: #e7e9ee; background: #21252e; border: 1px solid #2c313c;
+        border-radius: 999px; padding: 0.34rem 0.7rem;
+      }
+      .checks label:has(input:checked), .checks label.ordered {
+        background: #2a3c5e; border-color: #6ea8fe;
+      }
+      .checks label .order-badge { background: #6ea8fe; color: #0f1115; }
+      .preset-btn {
+        color: #e7e9ee; background: #21252e; border: 1px solid #2c313c;
+        border-radius: 999px;
+      }
+      .preset-btn:hover { background: #2a3c5e; border-color: #6ea8fe; }
+      .preset-btn.active { background: #2a3c5e; border-color: #6ea8fe; font-weight: 600; }
+      button {
+        color: #e7e9ee; background: #21252e; border: 1px solid #2c313c;
+        border-radius: 10px; padding: 0.5rem 1rem;
+      }
+      button:hover { background: #2a3c5e; }
+      .output-section { border-top: 1px solid #2c313c; }
+      .prompt-area.secondary { border-color: #b5689a; background: #261f2b; }
+      .toast { color: #4ec98a; }
+      .pass-label { color: #6ea8fe; }
+      .platform-hint {
+        color: #e7e9ee; background: #2a3c5e;
+        border-left: 3px solid #6ea8fe; border-radius: 8px; padding: 0.5rem 0.7rem;
+      }
+      [data-tip]::after { background: #21252e; border: 1px solid #6ea8fe; color: #e7e9ee; }
+    </style>
+</head>
+    <body>
+        <h1>Prompt Builder Hub</h1>
+        <p class="subtitle">
+            Pick the output domain. Each builder is tuned to the platform syntax,
+            jargon, and parameters of that medium.
+        </p>
+
+        <div class="grid">
+            <a class="card" href="coding-prompts.html">
+                <div class="card-icon">&lt;/&gt;</div>
+                <div class="card-title">Code</div>
+                <div class="card-desc">
+                    LLM coding-agent prompts. Domain presets per language/framework,
+                    coding conventions, tooling, error handling, testing.
+                </div>
+                <div class="card-platforms">
+                    Claude Code, Cursor, Windsurf, Copilot, Aider, Cline, v0, Bolt, ChatGPT, Gemini
+                </div>
+            </a>
+
+            <a class="card" href="image-prompts.html">
+                <div class="card-icon">&#9635;</div>
+                <div class="card-title">Image</div>
+                <div class="card-desc">
+                    Image-generation prompts with photographic jargon — camera angle,
+                    lens focal length, lighting, composition, aesthetic.
+                </div>
+                <div class="card-platforms">
+                    Midjourney, DALL-E 3, SDXL, Flux.1, Nano Banana, Ideogram, Firefly, Leonardo, Recraft
+                </div>
+            </a>
+
+            <a class="card" href="video-prompts.html">
+                <div class="card-icon">&#9654;</div>
+                <div class="card-title">Video</div>
+                <div class="card-desc">
+                    Video-generation prompts with cinema jargon — camera moves (dolly,
+                    crane, whip pan), shot types, lens, aspect, speed effects.
+                </div>
+                <div class="card-platforms">
+                    Higgsfield, Runway Gen-3, Sora, Kling, Pika, Luma, Hailuo, Veo
+                </div>
+            </a>
+
+            <a class="card" href="music-prompts.html">
+                <div class="card-icon">&#9835;</div>
+                <div class="card-title">Music</div>
+                <div class="card-desc">
+                    Music-generation prompts with audio jargon — genre, BPM,
+                    instrumentation, vocal style, song-structure tags.
+                </div>
+                <div class="card-platforms">
+                    Suno v4 + v3.5, Udio, Stable Audio 2, MusicGen, Riffusion, AIVA, Soundraw
+                </div>
+            </a>
+
+            <a class="card" href="tts-prompts.html">
+                <div class="card-icon">&#127908;</div>
+                <div class="card-title">Voice / TTS</div>
+                <div class="card-desc">
+                    Text-to-speech prompts with voice direction — accent, age,
+                    pace, pitch, emotion, inline performance tags, SSML output.
+                </div>
+                <div class="card-platforms">
+                    ElevenLabs v3 + v2, OpenAI TTS, Google Neural2/Studio, Polly, Azure, Cartesia, PlayHT, Resemble
+                </div>
+            </a>
+
+            <a class="card" href="mesh-prompts.html">
+                <div class="card-icon">&#9670;</div>
+                <div class="card-title">3D Mesh</div>
+                <div class="card-desc">
+                    3D-mesh-generation prompts with technical 3D jargon — topology,
+                    UVs, PBR maps, engine-export conventions, polycount budget.
+                </div>
+                <div class="card-platforms">
+                    Meshy.ai, Tripo3D, Rodin, TRELLIS, Hunyuan3D, Stable Fast 3D, InstantMesh
+                </div>
+            </a>
+        </div>
+
+        <footer>
+            <a href="https://github.com/TolinSimpson/prompt-builder">View Project on GitHub</a>
+        </footer>
+    
+    <script>
+      (function () {
+        function report() {
+          parent.postMessage(
+            { __promptBuilder: true, height: document.documentElement.scrollHeight },
+            "*"
+          );
+        }
+        new ResizeObserver(report).observe(document.documentElement);
+        ["input", "change"].forEach(function (ev) {
+          document.addEventListener(ev, function () { setTimeout(report, 0); }, true);
+        });
+        document.addEventListener("click", function (e) {
+          var a = e.target && e.target.closest ? e.target.closest("a") : null;
+          var href = a ? a.getAttribute("href") || "" : "";
+          if (a && /^https?:/i.test(href)) { a.target = "_blank"; a.rel = "noopener"; return; }
+          if (a && /\.html($|[?#])/i.test(href)) {
+            e.preventDefault();
+            parent.postMessage({ __promptBuilderNav: href.replace(/[?#].*$/, "") }, "*");
+            return;
+          }
+          setTimeout(report, 0);
+        }, true);
+        window.addEventListener("load", report);
+        setTimeout(report, 50);
+      })();
+    </script>
+</body>
+</html>

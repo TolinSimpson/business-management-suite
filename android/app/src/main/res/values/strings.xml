@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Schedule</string>
-    <string name="title_activity_main">Schedule</string>
-    <string name="package_name">engineering.happy.schedule</string>
-    <string name="custom_url_scheme">engineering.happy.schedule</string>
-</resources>

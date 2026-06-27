@@ -1,7 +1,7 @@
 import { writable } from "svelte/store";
-import type { AppState, BlockInstance, DayKey } from "./types";
+import type { AppState, BlockInstance, MonthlyReport } from "./types";
 import { defaultState } from "./defaults";
-import { emptyMonth } from "./month";
+import { toMinutes } from "./schedule";
 
 const STORAGE_KEY = "schedule-app-state-v1";
 
@@ -11,7 +11,9 @@ function load(): AppState {
     if (raw) {
       // Shallow-merge over defaults so new fields added in later versions
       // don't break an older saved state.
-      return { ...defaultState(), ...JSON.parse(raw) } as AppState;
+      const saved = JSON.parse(raw) as Partial<AppState>;
+      const base = defaultState();
+      return { ...base, ...saved };
     }
   } catch {
     /* fall through to defaults */
@@ -60,11 +62,94 @@ export function toggleStep(date: string, time: string, step: string): void {
   });
 }
 
-/** Edit one day slot of a month's focus plan, creating the month lazily. */
-export function setMonthlyTask(mk: string, week: number, day: DayKey, value: string): void {
+/** Set (or clear) which employee this device belongs to — drives the schedule. */
+export function setMyEmployeeId(id: string | undefined): void {
   update((s) => {
-    const weeks = (s.monthlyPlans[mk] ??= emptyMonth());
-    weeks[week].days[day] = value;
+    if (id) s.myEmployeeId = id;
+    else delete s.myEmployeeId;
+  });
+}
+
+// ---- Personal off-hours schedule -------------------------------------------
+
+export function setPersonalEnabled(enabled: boolean): void {
+  update((s) => {
+    s.personal.enabled = enabled;
+  });
+}
+
+/** Default wake alarm if a saved state predates the field. */
+function ensureWakeAlarm(s: AppState): NonNullable<AppState["personal"]["wakeAlarm"]> {
+  return (s.personal.wakeAlarm ??= { enabled: false, time: "06:00" });
+}
+
+export function setWakeAlarmEnabled(enabled: boolean): void {
+  update((s) => {
+    ensureWakeAlarm(s).enabled = enabled;
+  });
+}
+
+export function setWakeAlarmTime(time: string): void {
+  update((s) => {
+    if (time) ensureWakeAlarm(s).time = time;
+  });
+}
+
+/** Add a personal block, keeping the list sorted by time. */
+export function addPersonalBlock(): void {
+  update((s) => {
+    s.personal.blocks = [...s.personal.blocks, { time: "12:00", label: "New block" }].sort(
+      (a, b) => toMinutes(a.time) - toMinutes(b.time)
+    );
+  });
+}
+
+export function updatePersonalBlock(index: number, patch: { time?: string; label?: string; detail?: string }): void {
+  update((s) => {
+    const b = s.personal.blocks[index];
+    if (!b) return;
+    if (patch.time !== undefined) b.time = patch.time;
+    if (patch.label !== undefined) b.label = patch.label;
+    if (patch.detail !== undefined) {
+      if (patch.detail.trim()) b.detail = patch.detail;
+      else delete b.detail;
+    }
+    s.personal.blocks.sort((a, b2) => toMinutes(a.time) - toMinutes(b2.time));
+  });
+}
+
+export function removePersonalBlock(index: number): void {
+  update((s) => {
+    s.personal.blocks = s.personal.blocks.filter((_, i) => i !== index);
+  });
+}
+
+/** Unlock the management tools (after password or biometric verification). */
+export function adminUnlock(): void {
+  update((s) => {
+    s.manage = { signedIn: true };
+  });
+}
+
+export function adminLock(): void {
+  update((s) => {
+    s.manage = { signedIn: false };
+  });
+}
+
+/** Add or replace the monthly report for a given month (newest data wins). */
+export function saveReport(entry: Omit<MonthlyReport, "id">): void {
+  update((s) => {
+    const id = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2);
+    const existing = s.reports.findIndex((r) => r.month === entry.month);
+    if (existing >= 0) s.reports[existing] = { ...s.reports[existing], ...entry };
+    else s.reports.push({ id, ...entry });
+  });
+}
+
+export function removeReport(id: string): void {
+  update((s) => {
+    s.reports = s.reports.filter((r) => r.id !== id);
   });
 }
 

@@ -1,5 +1,4 @@
-import type { AppState, Block, DayKey, TemplateKey } from "./types";
-import { DAY_KEYS } from "./types";
+import type { AppState, Block, Holiday, PlanTarget, ScheduleTemplate } from "./types";
 
 // Pure scheduling logic — no DOM, no storage — so it is trivially unit-testable.
 
@@ -14,6 +13,14 @@ export function toMinutes(time: string): number {
   return h * 60 + m;
 }
 
+/** Format a 24h "HH:MM" as a 12-hour clock time, e.g. "09:00" -> "9:00 AM". */
+export function formatTime(time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  const period = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
 /** Local date -> "YYYY-MM-DD" (no UTC shift). */
 export function dateKey(d: Date): string {
   const y = d.getFullYear();
@@ -22,20 +29,33 @@ export function dateKey(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-export function dayKeyOf(d: Date): DayKey {
-  return DAY_KEYS[d.getDay()];
+// ---- Holidays --------------------------------------------------------------
+
+/** The company holiday falling on `key` ("YYYY-MM-DD"), if any. */
+export function findHoliday(holidays: Holiday[] | undefined, key: string): Holiday | undefined {
+  return holidays?.find((h) => h.date === key);
 }
 
-/** Which standing template applies to a given date. */
-export function templateKeyOf(d: Date): TemplateKey {
-  const day = d.getDay();
-  if (day === 6) return "saturday";
-  if (day === 0) return "sunday";
-  return "weekday";
+// ---- Off-hours -------------------------------------------------------------
+
+/**
+ * True when `now` is outside work hours — a weekend, or before/after the active
+ * focus window on a weekday. Drives whether the personal schedule takes over.
+ */
+export function isOffHours(now: Date, activeHours: { start: number; end: number }): boolean {
+  const day = now.getDay(); // 0 Sun … 6 Sat
+  if (day === 0 || day === 6) return true;
+  const h = now.getHours();
+  return h < activeHours.start || h >= activeHours.end;
 }
 
-export function templateFor(state: AppState, d: Date): Block[] {
-  return state.scheduleTemplates[templateKeyOf(d)];
+// ---- Next-day planning -----------------------------------------------------
+
+/** The date that the planning block on `d` is planning for (the next day). */
+export function nextDay(d: Date): Date {
+  const n = new Date(d);
+  n.setDate(d.getDate() + 1);
+  return n;
 }
 
 export interface CurrentBlock {
@@ -73,13 +93,17 @@ export interface NowView {
   /** the active block's start time, "HH:MM" — used to address its instance data */
   time: string;
   label: string;
-  theme: string;
+  detail: string;
   taskNote: string;
-  /** composed "Label — Theme — Task" line for the notification / header */
+  /** composed "Label — Task" line for the notification / header */
   headline: string;
   endsInMin: number;
   next: Block | null;
   checklist: { step: string; done: boolean }[];
+  /** true when this block has planning inputs (an end-of-day plan form) */
+  isPlan: boolean;
+  /** this block's planning inputs (empty unless isPlan) */
+  planTargets: PlanTarget[];
 }
 
 /** Pretty-case a label for display, e.g. "deep work" -> "Deep work". */
@@ -88,42 +112,53 @@ export function displayLabel(label: string): string {
 }
 
 /** Everything the Now screen needs for a given moment. */
-export function nowView(state: AppState, now: Date): NowView | null {
-  const cur = currentBlock(templateFor(state, now), now);
+export function nowView(template: ScheduleTemplate, state: AppState, now: Date): NowView | null {
+  const cur = currentBlock(template.blocks, now);
   if (!cur) return null;
 
-  const theme = state.weeklyThemes[dayKeyOf(now)];
   const dk = dateKey(now);
   const inst = state.days[dk]?.blocks[cur.block.time];
   const taskNote = inst?.taskNote ?? "";
 
-  const steps = state.blockProcesses[normLabel(cur.block.label)] ?? [];
+  const steps = cur.block.checklist ?? [];
   const checklist = steps.map((step) => ({
     step,
     done: !!inst?.checklist?.[step],
   }));
+  const planTargets = cur.block.plan ?? [];
 
-  const parts = [displayLabel(cur.block.label), theme];
+  const parts = [displayLabel(cur.block.label)];
   if (taskNote) parts.push(taskNote);
 
   return {
     time: cur.block.time,
     label: cur.block.label,
-    theme,
+    detail: cur.block.detail ?? "",
     taskNote,
     headline: parts.join(" — "),
     endsInMin: cur.endsInMin,
     next: cur.next,
     checklist,
+    isPlan: planTargets.length > 0,
+    planTargets,
   };
 }
 
-/** The list of hour-boundary times (minutes since midnight) within active hours. */
-export function alarmTimesFor(state: AppState, d: Date): number[] {
+/**
+ * The list of block-start times (minutes since midnight) to chime at. Work
+ * schedules are clamped to the focus window; the personal off-hours schedule
+ * passes `respectActiveHours: false` so its (by definition off-hours) blocks
+ * still alarm.
+ */
+export function alarmTimesFor(
+  template: ScheduleTemplate,
+  state: AppState,
+  respectActiveHours = true
+): number[] {
   const { start, end } = state.settings.activeHours;
-  const times = templateFor(state, d)
+  const times = template.blocks
     .map((b) => toMinutes(b.time))
-    .filter((m) => m >= start * 60 && m <= end * 60)
+    .filter((m) => !respectActiveHours || (m >= start * 60 && m <= end * 60))
     .sort((a, b) => a - b);
   return [...new Set(times)];
 }

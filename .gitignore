@@ -21,15 +21,3 @@ Thumbs.db
 .env
 .env.*
 !.env.example
-
-# Android / Capacitor build artifacts
-android/.gradle/
-android/build/
-android/app/build/
-android/captures/
-android/local.properties
-android/.idea/
-android/app/release/
-*.keystore
-*.jks
-!android/app/src/**/*.keystore

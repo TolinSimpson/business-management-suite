@@ -2,8 +2,8 @@ import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { VitePWA } from "vite-plugin-pwa";
 
-// Minimal config. `base: "./"` keeps asset paths relative so the same build
-// works both as an installed PWA and inside the Capacitor Android shell.
+// Minimal config. `base: "./"` keeps asset paths relative so the build works
+// when served from any path and as an installed PWA.
 export default defineConfig({
   base: "./",
   plugins: [
@@ -16,6 +16,18 @@ export default defineConfig({
       devOptions: { enabled: true },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,webmanifest}"],
+        // config.json is the shared company directory — always try the network
+        // first so published edits propagate, falling back to cache offline.
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.endsWith("config.json"),
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "org-config",
+              expiration: { maxEntries: 1 },
+            },
+          },
+        ],
       },
       manifest: {
         name: "Schedule",
