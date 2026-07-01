@@ -279,6 +279,16 @@
   <button onclick={() => confirm("Reset all data to defaults?") && resetState()}>Reset</button>
 </div>
 
+<footer class="app-foot muted">
+  <span>© 2026 Tolin Simpson</span>
+  <span aria-hidden="true">·</span>
+  <a
+    href="https://github.com/TolinSimpson/business-management-suite"
+    target="_blank"
+    rel="noopener noreferrer">Source code</a
+  >
+</footer>
+
 <style>
   .set-row {
     display: flex;
@@ -408,6 +418,19 @@
   .badge.on {
     background: var(--accent-dim);
     border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* App footer: copyright + source link */
+  .app-foot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px 0 8px;
+    font-size: 0.78rem;
+  }
+  .app-foot a {
     color: var(--accent);
   }
 

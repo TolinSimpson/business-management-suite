@@ -1,4 +1,6 @@
-# Business Management Tool
+[![Deploy to GitHub Pages](https://github.com/TolinSimpson/business-management-suite/actions/workflows/deploy.yml/badge.svg)](https://github.com/TolinSimpson/business-management-suite/actions/workflows/deploy.yml)
+
+# Business Management Suite
 
 An all-in-one app for running a small team from your phone: everyone sees their own
 daily schedule, a shared staff directory, and a simple budget/pay overview — plus
