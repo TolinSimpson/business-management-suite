@@ -534,6 +534,9 @@
   let ghPat = $state(getPat());
   let publishing = $state(false);
   let publishMsg = $state("");
+  // Whether a token is currently stored on this device — surfaced so the manager
+  // can confirm at a glance that it persisted (it lives in localStorage).
+  let patSaved = $state(!!getPat());
 
   function saveGitHub() {
     setRepoTarget({
@@ -543,6 +546,17 @@
       branch: ghBranch.trim() || "main",
     });
     setPat(ghPat.trim());
+    patSaved = !!getPat();
+  }
+
+  /** Persist the token as soon as the field loses focus, so it can't be lost by
+   *  forgetting to press Save. Never clears a stored token on an empty field. */
+  function persistPatOnBlur() {
+    const v = ghPat.trim();
+    if (v && v !== getPat()) {
+      setPat(v);
+      patSaved = true;
+    }
   }
 
   async function publishToGitHub() {
@@ -784,7 +798,7 @@
           {/if}
           <label class="chk" style="margin-top:4px">
             <input type="checkbox" bind:checked={ev.replacesDay} />
-            Replace the normal schedule that day
+            All-day event (replaces the day's schedule)
           </label>
         </div>
       {/each}
@@ -897,8 +911,12 @@
         aria-label="GitHub token"
         placeholder="github_pat_… (stored on this device)"
         bind:value={ghPat}
+        onblur={persistPatOnBlur}
       />
     </div>
+    <p class="muted note" style="margin:6px 0 0">
+      {patSaved ? "✓ A token is saved on this device." : "No token saved on this device yet."}
+    </p>
     <div class="actions" style="margin:10px 0 8px">
       <button onclick={saveGitHub}>Save token</button>
       <button class="primary" disabled={publishing} onclick={publishToGitHub}>
